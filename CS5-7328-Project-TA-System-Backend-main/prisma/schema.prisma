@@ -1,0 +1,210 @@
+// define your database configuration here
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// define the data model here
+model User {
+  id                     Int                @id @default(autoincrement())
+  smuNo                  Int
+  username               String             @unique
+  email                  String             @unique
+  firstName              String
+  lastName               String
+  password               String
+  resetToken             String?            @unique
+  resetTokenExpiry       BigInt?
+  updatedAt              DateTime?          @updatedAt
+  userType               String?
+  student                Student?
+  faculty                Faculty?
+  admin                  Admin?
+  sentMessages           UserMessage[]      @relation(name: "MessageSender") // Relation to sent messages
+  receivedMessages       UserMessage[]      @relation(name: "MessageReceiver") // Relation to received messages
+  Feedback               Feedback[]
+  FeedbackComments       FeedbackComment[]
+  taEvaluationsAsTA      TAEvaluation[]     @relation("TaEvaluations")
+  taEvaluationsAsFaculty TAEvaluation[]     @relation("FacultyEvaluations")
+  TAEvaluation           TAEvaluation[]
+}
+
+model Faculty {
+  userId      Int             @id
+  designation String
+  department  String
+  courses     FacultyCourse[]
+  user        User            @relation(fields: [userId], references: [id])
+  TAJob       TAJob[]
+}
+
+model Student {
+  userId        Int             @id
+  year          Int?
+  courses       StudentCourse[]
+  tas           CourseTA[] // Opposite relation field for CourseTA
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  TAApplication TAApplication[]
+}
+
+model Admin {
+  userId Int    @id
+  role   String // This can be an enum if you have predefined roles
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Course {
+  id            Int             @id @default(autoincrement())
+  courseCode    String          @unique
+  title         String
+  description   String?         @db.Text
+  faculties     FacultyCourse[]
+  students      StudentCourse[]
+  tas           CourseTA[] // Opposite relation field for CourseTA
+  TAJob         TAJob[]
+  TAApplication TAApplication[]
+  TAEvaluation  TAEvaluation[]
+  tasks         Task[]
+}
+
+model FacultyCourse {
+  facultyId Int
+  courseId  Int
+  faculty   Faculty @relation(fields: [facultyId], references: [userId])
+  course    Course  @relation(fields: [courseId], references: [id])
+
+  @@id([facultyId, courseId])
+}
+
+model StudentCourse {
+  studentId Int
+  courseId  Int
+  student   Student @relation(fields: [studentId], references: [userId])
+  course    Course  @relation(fields: [courseId], references: [id])
+
+  @@id([studentId, courseId])
+}
+
+model CourseTA {
+  studentId Int
+  courseId  Int
+  student   Student @relation(fields: [studentId], references: [userId])
+  course    Course  @relation(fields: [courseId], references: [id])
+
+  @@id([studentId, courseId])
+}
+
+model TAJob {
+  id                Int             @id @default(autoincrement())
+  title             String
+  courseId          Int
+  course            Course          @relation(fields: [courseId], references: [id])
+  courseSchedule    String
+  totalHoursPerWeek Int
+  maxNumberOfTAs    Int
+  requiredCourses   String
+  requiredSkills    String
+  TAStats           String // Can be turned into an Enum with values "Master student", "Under", etc.
+  notes             String?
+  deadlineToApply   DateTime
+  facultyId         Int
+  faculty           Faculty         @relation(fields: [facultyId], references: [userId])
+  applications      TAApplication[]
+}
+
+model TAApplication {
+  id                  Int           @id @default(autoincrement())
+  courseId            Int
+  course              Course        @relation(fields: [courseId], references: [id])
+  studentId           Int
+  student             Student       @relation(fields: [studentId], references: [userId], onDelete: Cascade)
+  hoursCanWorkPerWeek String
+  coursesTaken        String?
+  status              String?
+  GPA                 Float
+  requiredCourses     String // A comma separated list of required courses taken
+  requiredSkills      String // A comma separated list of required skills
+  resumeFile          String // URL or path to the file. This depends on how you handle file uploads.
+  taJobId             Int
+  taJob               TAJob         @relation(fields: [taJobId], references: [id])
+  messages            UserMessage[] @relation(name: "ApplicationMessages") // Relation to UserMessage
+}
+
+model UserMessage {
+  id            Int           @id @default(autoincrement())
+  content       String
+  createdAt     DateTime      @default(now())
+  senderId      Int
+  receiverId    Int
+  applicationId Int
+  isRead        Boolean       @default(false)
+  sender        User          @relation(name: "MessageSender", fields: [senderId], references: [id])
+  receiver      User          @relation(name: "MessageReceiver", fields: [receiverId], references: [id])
+  application   TAApplication @relation(name: "ApplicationMessages", fields: [applicationId], references: [id])
+}
+
+// added new schema module notification
+model TAEvaluation {
+  id                     Int      @id @default(autoincrement())
+  taUserId               Int
+  facultyUserId          Int
+  courseId               Int
+  teachingSkill          Int
+  mentoringSkill         Int
+  effectiveCommunication Int
+  comments               String
+  createdAt              DateTime @default(now())
+
+  taUser      User   @relation("TaEvaluations", fields: [taUserId], references: [id])
+  facultyUser User   @relation("FacultyEvaluations", fields: [facultyUserId], references: [id])
+  course      Course @relation(fields: [courseId], references: [id])
+  User        User?  @relation(fields: [userId], references: [id])
+  userId      Int?
+}
+
+// added new schema module notification
+model Task {
+  facultyId   Int
+  studentId   Int
+  title       String
+  description String?
+  TaskId      Int     @id @default(autoincrement())
+  completed   Boolean @default(false)
+
+    // Custom course id
+  course       Course?   @relation(fields: [courseId], references: [id])
+  courseId     Int?
+}
+
+model Feedback {
+  id       Int  @id @default(autoincrement())
+  leftById Int
+  leftBy   User @relation(fields: [leftById], references: [id])
+
+  content  String
+  complete Boolean
+  status String @default("Unread")
+
+  timeSubmitted DateTime @default(now())
+
+  comments FeedbackComment[]
+
+  type String @default("feedback") // Either "feedback" or "bug"
+}
+
+model FeedbackComment {
+  id         Int      @id @default(autoincrement())
+  feedbackId Int
+  feedback   Feedback @relation(fields: [feedbackId], references: [id])
+
+  leftById Int
+  leftBy   User @relation(fields: [leftById], references: [id])
+
+  content       String
+  timeSubmitted DateTime @default(now())
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
